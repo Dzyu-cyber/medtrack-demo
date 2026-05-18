@@ -24,7 +24,7 @@ export default function DoctorDashboard() {
   const fetchPatients = useCallback(async (date) => {
     setLoading(true);
     try {
-      const { data } = await axios.get('http://localhost:3001/api/patients', {
+      const { data } = await axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/patients`, {
         params: { doctorId: user.userId, date: toISO(date) },
       });
       setPatients(data);

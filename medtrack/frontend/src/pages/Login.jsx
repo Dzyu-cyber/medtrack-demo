@@ -17,7 +17,7 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      const { data } = await axios.post('http://localhost:3001/api/auth/login', { name, code, role });
+      const { data } = await axios.post(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/auth/login`, { name, code, role });
       if (data.success) {
         login(data);
         navigate(role === 'doctor' ? '/doctor' : '/patient', { replace: true });

@@ -25,7 +25,7 @@ export default function PatientDashboard() {
       setLoading(true);
       try {
         const { data } = await axios.get(
-          `http://localhost:3001/api/medications/${user.userId}`,
+          `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/medications/${user.userId}`,
           { params: { date: dateStr } }
         );
         setPatientName(data.name);
@@ -44,7 +44,7 @@ export default function PatientDashboard() {
     // Optimistic update
     setMeds(prev => prev.map(m => m.id === medId ? { ...m, taken: newTaken } : m));
     try {
-      await axios.patch('http://localhost:3001/api/medications/log', {
+      await axios.patch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/medications/log`, {
         medicationId: medId,
         date: dateStr,
         taken: newTaken,
