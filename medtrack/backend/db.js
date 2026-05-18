@@ -2,7 +2,7 @@ const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, 'medtrack.db');
+const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'medtrack.db');
 
 let _db = null;
 let _inTransaction = false;
