@@ -1,170 +1,192 @@
-const initSqlJs = require('sql.js');
-const fs = require('fs');
-const path = require('path');
+require('dotenv').config();
+const { createClient } = require('@supabase/supabase-js');
 
-const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'medtrack.db');
+let supabase = null;
 
-let _db = null;
-let _inTransaction = false;
-
-function save() {
-  if (!_db || _inTransaction) return;
-  const data = _db.export();
-  fs.writeFileSync(DB_PATH, Buffer.from(data));
+if (process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
+  supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+  console.log('⚡ Connected to Supabase Database!');
+} else {
+  console.error('❌ Supabase credentials missing in .env. Cannot proceed.');
+  process.exit(1);
 }
 
-function getLastInsertRowid() {
-  const result = _db.exec('SELECT last_insert_rowid()');
-  return result.length > 0 ? result[0].values[0][0] : null;
-}
-
-// Proxy mimicking better-sqlite3 synchronous API
-const db = {
-  prepare(sql) {
-    return {
-      get(...args) {
-        const stmt = _db.prepare(sql);
-        if (args.length > 0) stmt.bind(args);
-        const hasRow = stmt.step();
-        const row = hasRow ? { ...stmt.getAsObject() } : undefined;
-        stmt.free();
-        return row;
-      },
-      all(...args) {
-        const rows = [];
-        const stmt = _db.prepare(sql);
-        if (args.length > 0) stmt.bind(args);
-        while (stmt.step()) rows.push({ ...stmt.getAsObject() });
-        stmt.free();
-        return rows;
-      },
-      run(...args) {
-        _db.run(sql, args.length > 0 ? args : undefined);
-        const rowid = getLastInsertRowid();
-        save();
-        return { lastInsertRowid: rowid, changes: _db.getRowsModified() };
-      },
-    };
-  },
-  exec(sql) {
-    _db.exec(sql);
-    save();
-  },
-  pragma() { /* no-op for sql.js */ },
-  transaction(fn) {
-    return () => {
-      _inTransaction = true;
-      _db.run('BEGIN TRANSACTION');
-      try {
-        fn();
-        _db.run('COMMIT');
-      } catch (e) {
-        _db.run('ROLLBACK');
-        throw e;
-      } finally {
-        _inTransaction = false;
-        save();
-      }
-    };
-  },
-};
-
+// ---------------------------------------------------------
+// DB Initialization
+// ---------------------------------------------------------
 async function initDb() {
-  const SQL = await initSqlJs();
-
-  if (fs.existsSync(DB_PATH)) {
-    const fileBuffer = fs.readFileSync(DB_PATH);
-    _db = new SQL.Database(fileBuffer);
-    console.log('📂 Loaded existing database');
-  } else {
-    _db = new SQL.Database();
-    console.log('🆕 Created new database');
-  }
-
-  // Create tables
-  _db.exec(`
-    CREATE TABLE IF NOT EXISTS doctors (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      code TEXT NOT NULL UNIQUE
-    );
-    CREATE TABLE IF NOT EXISTS patients (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      phone TEXT NOT NULL,
-      doctor_id INTEGER,
-      FOREIGN KEY (doctor_id) REFERENCES doctors(id)
-    );
-    CREATE TABLE IF NOT EXISTS medications (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      patient_id INTEGER,
-      name TEXT NOT NULL,
-      frequency TEXT NOT NULL,
-      FOREIGN KEY (patient_id) REFERENCES medications(id)
-    );
-    CREATE TABLE IF NOT EXISTS medication_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      medication_id INTEGER,
-      date TEXT NOT NULL,
-      taken INTEGER DEFAULT 0,
-      FOREIGN KEY (medication_id) REFERENCES medications(id)
-    );
-  `);
-
-  // Seed if empty
-  const result = _db.exec('SELECT COUNT(*) as c FROM doctors');
-  const count = result[0]?.values[0][0] ?? 0;
-  if (count === 0) {
-    console.log('🌱 Seeding database...');
-    _db.run('INSERT INTO doctors (name, code) VALUES (?, ?)', ['Dr. Priya Rao', 'DR001']);
-    const doctorId = getLastInsertRowid();
-
-    const patients = [
-      { name: 'Ravi Kumar',        phone: '9876543210', meds: [['Metformin 500mg','Twice daily'],['Lisinopril 10mg','Once daily'],['Amlodipine 5mg','Once daily']] },
-      { name: 'Sunita Devi',       phone: '9823456789', meds: [['Atorvastatin 20mg','Once at night'],['Aspirin 75mg','Once daily']] },
-      { name: 'Arjun Sharma',      phone: '9812345678', meds: [['Omeprazole 20mg','Before meals'],['Pantoprazole 40mg','Once daily'],['Domperidone 10mg','Three times daily'],['Multivitamin','Once daily']] },
-      { name: 'Meena Pillai',      phone: '9801234567', meds: [['Levothyroxine 50mcg','Once daily (fasting)'],['Calcium 500mg','Twice daily']] },
-      { name: 'Deepak Nair',       phone: '9798765432', meds: [['Metoprolol 25mg','Twice daily'],['Telmisartan 40mg','Once daily'],['Furosemide 20mg','Once daily']] },
-      { name: 'Kavitha Reddy',     phone: '9787654321', meds: [['Glimepiride 2mg','Before breakfast'],['Voglibose 0.2mg','With meals']] },
-      { name: 'Suresh Menon',      phone: '9776543210', meds: [['Clopidogrel 75mg','Once daily'],['Rosuvastatin 10mg','Once at night'],['Ramipril 5mg','Once daily'],['Bisoprolol 5mg','Once daily']] },
-      { name: 'Ananya Iyer',       phone: '9765432109', meds: [['Ferrous Sulfate 200mg','Twice daily'],['Folic Acid 5mg','Once daily']] },
-      { name: 'Prakash Verma',     phone: '9754321098', meds: [['Allopurinol 100mg','Once daily'],['Colchicine 0.5mg','As needed'],['Etoricoxib 60mg','Once daily']] },
-      { name: 'Latha Subramaniam', phone: '9743210987', meds: [['Escitalopram 10mg','Once daily'],['Clonazepam 0.5mg','At bedtime'],['Vitamin D3 60000IU','Weekly']] },
-      { name: 'Ramesh Gupta',      phone: '9732109876', meds: [['Sitagliptin 100mg','Once daily'],['Metformin 1000mg','Twice daily'],['Empagliflozin 10mg','Once daily'],['Vitamin B12 500mcg','Once daily']] },
-      { name: 'Preethi Krishnan',  phone: '9721098765', meds: [['Montelukast 10mg','At bedtime'],['Salbutamol Inhaler','As needed'],['Fluticasone Inhaler','Twice daily']] },
-    ];
-
-    const getDates = () => {
-      const dates = [];
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        dates.push(d.toISOString().split('T')[0]);
-      }
-      return dates;
-    };
-    const dates = getDates();
-
-    _inTransaction = true;
-    _db.run('BEGIN TRANSACTION');
-    for (const p of patients) {
-      _db.run('INSERT INTO patients (name, phone, doctor_id) VALUES (?, ?, ?)', [p.name, p.phone, doctorId]);
-      const patientId = getLastInsertRowid();
-      for (const [medName, freq] of p.meds) {
-        _db.run('INSERT INTO medications (patient_id, name, frequency) VALUES (?, ?, ?)', [patientId, medName, freq]);
-        const medId = getLastInsertRowid();
-        for (const date of dates) {
-          const taken = date < dates[dates.length - 1] ? (Math.random() > 0.3 ? 1 : 0) : 0;
-          _db.run('INSERT INTO medication_logs (medication_id, date, taken) VALUES (?, ?, ?)', [medId, date, taken]);
-        }
-      }
+  try {
+    // Verify connection by doing a simple health check query
+    const { data, error } = await supabase.from('doctors').select('id').limit(1);
+    if (error) {
+      console.error('❌ Supabase connection health check failed:', error.message);
+    } else {
+      console.log('✅ Supabase connection verified successfully. Ready.');
     }
-    _db.run('COMMIT');
-    _inTransaction = false;
-    save();
-    console.log('✅ Database seeded successfully!');
+  } catch (err) {
+    console.error('❌ Failed to initialize Supabase database:', err.message);
   }
 }
 
-db.initDb = initDb;
-module.exports = db;
+// ---------------------------------------------------------
+// Unified Adapter Query APIs (Async - Supabase Only)
+// ---------------------------------------------------------
+
+async function createDoctor(username, password) {
+  const { data, error } = await supabase
+    .from('doctors')
+    .insert({ username, password })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function getDoctorByUsername(username) {
+  const { data, error } = await supabase
+    .from('doctors')
+    .select('*')
+    .eq('username', username)
+    .maybeSingle();
+  if (error) throw error;
+  return data || undefined;
+}
+
+async function getDoctorByUsernameAndPassword(username, password) {
+  const { data, error } = await supabase
+    .from('doctors')
+    .select('*')
+    .eq('username', username)
+    .eq('password', password)
+    .maybeSingle();
+  if (error) throw error;
+  return data || undefined;
+}
+
+async function checkDoctorUsernameExists(username) {
+  const { data, error } = await supabase
+    .from('doctors')
+    .select('id')
+    .eq('username', username)
+    .maybeSingle();
+  if (error) throw error;
+  return !!data;
+}
+
+async function createPatient(name, username, password, phone, doctorId) {
+  const { data, error } = await supabase
+    .from('patients')
+    .insert({ name, username, password, phone, doctor_id: doctorId })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function getPatientByUsernameAndPassword(username, password) {
+  const { data, error } = await supabase
+    .from('patients')
+    .select('*')
+    .eq('username', username)
+    .eq('password', password)
+    .maybeSingle();
+  if (error) throw error;
+  return data || undefined;
+}
+
+async function checkPatientUsernameExists(username) {
+  const { data, error } = await supabase
+    .from('patients')
+    .select('id')
+    .eq('username', username)
+    .maybeSingle();
+  if (error) throw error;
+  return !!data;
+}
+
+async function getPatientById(id) {
+  const { data, error } = await supabase
+    .from('patients')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data || undefined;
+}
+
+async function getPatientsByDoctorId(doctorId) {
+  const { data, error } = await supabase
+    .from('patients')
+    .select('*')
+    .eq('doctor_id', doctorId)
+    .order('id', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+async function getMedicationsByPatientId(patientId) {
+  const { data, error } = await supabase
+    .from('medications')
+    .select('*')
+    .eq('patient_id', patientId)
+    .order('id', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+async function getMedicationById(id) {
+  const { data, error } = await supabase
+    .from('medications')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data || undefined;
+}
+
+async function createMedication(patientId, name, frequency) {
+  const { data, error } = await supabase
+    .from('medications')
+    .insert({ patient_id: patientId, name, frequency })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function getMedicationLog(medicationId, date) {
+  const { data, error } = await supabase
+    .from('medication_logs')
+    .select('*')
+    .eq('medication_id', medicationId)
+    .eq('date', date)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? { ...data, taken: data.taken ? 1 : 0 } : undefined;
+}
+
+async function upsertMedicationLog(medicationId, date, taken) {
+  const { error } = await supabase
+    .from('medication_logs')
+    .upsert({ medication_id: medicationId, date, taken: !!taken }, { onConflict: 'medication_id,date' });
+  if (error) throw error;
+}
+
+module.exports = {
+  initDb,
+  createDoctor,
+  getDoctorByUsername,
+  getDoctorByUsernameAndPassword,
+  checkDoctorUsernameExists,
+  createPatient,
+  getPatientByUsernameAndPassword,
+  checkPatientUsernameExists,
+  getPatientById,
+  getPatientsByDoctorId,
+  getMedicationsByPatientId,
+  getMedicationById,
+  createMedication,
+  getMedicationLog,
+  upsertMedicationLog,
+  isSupabaseActive: () => true,
+};

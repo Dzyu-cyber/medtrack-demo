@@ -21,6 +21,15 @@ export default function DoctorDashboard() {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Add Patient Modal State
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [patName, setPatName] = useState('');
+  const [patPhone, setPatPhone] = useState('');
+  const [patUsername, setPatUsername] = useState('');
+  const [patPassword, setPatPassword] = useState('');
+  const [modalError, setModalError] = useState('');
+  const [modalLoading, setModalLoading] = useState(false);
+
   const fetchPatients = useCallback(async (date) => {
     setLoading(true);
     try {
@@ -65,6 +74,36 @@ export default function DoctorDashboard() {
     });
   };
 
+  const handleAddPatientSubmit = async (e) => {
+    e.preventDefault();
+    setModalError('');
+    setModalLoading(true);
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const { data } = await axios.post(`${apiUrl}/api/patients`, {
+        name: patName.trim(),
+        phone: patPhone.trim() || null,
+        username: patUsername.trim(),
+        password: patPassword,
+        doctorId: user.userId
+      });
+
+      if (data.id) {
+        // Success
+        setPatName('');
+        setPatPhone('');
+        setPatUsername('');
+        setPatPassword('');
+        setShowAddModal(false);
+        fetchPatients(viewDate);
+      }
+    } catch (err) {
+      setModalError(err.response?.data?.error || err.response?.data?.message || 'Failed to register patient. Username might be taken.');
+    } finally {
+      setModalLoading(false);
+    }
+  };
+
   const isToday = toISO(viewDate) === toISO(today);
   const minDate = new Date(today.getTime() - 7 * DAY_MS);
   const maxDate = new Date(today.getTime() + 7 * DAY_MS);
@@ -79,6 +118,9 @@ export default function DoctorDashboard() {
         </div>
         <div className="header-right">
           <span className="header-user">Logged in as <strong>{user.displayName}</strong></span>
+          <button id="add-patient-header-btn" className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+            ➕ Add Patient
+          </button>
           <button id="doctor-logout-btn" className="btn btn-outline" onClick={handleLogout}>
             ↩ Logout
           </button>
@@ -115,18 +157,107 @@ export default function DoctorDashboard() {
             <span>Loading patient data…</span>
           </div>
         ) : patients.length === 0 ? (
-          <div className="empty-state">
-            <div style={{ fontSize: '2.5rem' }}>🏥</div>
-            <p>No patients found for this doctor.</p>
+          <div className="empty-state" style={{ maxWidth: '500px', margin: '40px auto' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🏥</div>
+            <h2 style={{ color: 'var(--navy)', fontWeight: '700', marginBottom: '8px' }}>Your clinic is empty</h2>
+            <p style={{ color: 'var(--gray-600)', marginBottom: '24px' }}>Get started by adding your first patient using the button below or at the top right.</p>
+            <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+              ➕ Add Your First Patient
+            </button>
           </div>
         ) : (
           <div className="patients-grid">
             {patients.map(p => (
-              <PatientCard key={p.id} patient={p} />
+              <PatientCard key={p.id} patient={p} onUpdate={() => fetchPatients(viewDate)} />
             ))}
           </div>
         )}
       </main>
+
+      {/* Add Patient Modal */}
+      {showAddModal && (
+        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Register New Patient</h2>
+              <button className="modal-close" onClick={() => setShowAddModal(false)}>✕</button>
+            </div>
+            <form onSubmit={handleAddPatientSubmit}>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label htmlFor="modal-pat-name">Patient Full Name</label>
+                  <input
+                    id="modal-pat-name"
+                    type="text"
+                    placeholder="Alice Miller"
+                    value={patName}
+                    onChange={e => setPatName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="modal-pat-phone">Phone Number</label>
+                  <input
+                    id="modal-pat-phone"
+                    type="tel"
+                    placeholder="9876543210"
+                    value={patPhone}
+                    onChange={e => setPatPhone(e.target.value)}
+                  />
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor="modal-pat-username">Patient Username</label>
+                    <input
+                      id="modal-pat-username"
+                      type="text"
+                      placeholder="alice_m"
+                      value={patUsername}
+                      onChange={e => setPatUsername(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="modal-pat-pass">Create Password</label>
+                    <input
+                      id="modal-pat-pass"
+                      type="text"
+                      placeholder="alicepass"
+                      value={patPassword}
+                      onChange={e => setPatPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                {modalError && (
+                  <div className="login-error" style={{ marginTop: '5px' }}>
+                    ⚠️ {modalError}
+                  </div>
+                )}
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setShowAddModal(false)}
+                  disabled={modalLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={modalLoading}
+                >
+                  {modalLoading ? 'Creating Patient…' : 'Register Patient'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
