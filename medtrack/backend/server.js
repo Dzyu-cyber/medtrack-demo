@@ -15,13 +15,18 @@ async function main() {
   const app = express();
   const httpServer = http.createServer(app);
 
-  const allowedOrigin = process.env.FRONTEND_URL || 'http://localhost:5173';
-
   const io = new Server(httpServer, {
-    cors: { origin: allowedOrigin, methods: ['GET', 'POST', 'PATCH'] },
+    cors: { 
+      origin: (origin, callback) => callback(null, true), 
+      methods: ['GET', 'POST', 'PATCH'],
+      credentials: true
+    },
   });
 
-  app.use(cors({ origin: allowedOrigin }));
+  app.use(cors({ 
+    origin: true, 
+    credentials: true 
+  }));
   app.use(express.json());
 
   medicationsRoutes.setIO(io);
