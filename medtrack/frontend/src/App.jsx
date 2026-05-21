@@ -7,17 +7,25 @@ import PatientDashboard from './pages/PatientDashboard';
 
 export default function App() {
   const [user, setUser] = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem('medtrack_user')); }
+    try { 
+      return JSON.parse(sessionStorage.getItem('medtrack_user')) || JSON.parse(localStorage.getItem('medtrack_user')); 
+    }
     catch { return null; }
   });
 
-  const login = (userData) => {
+  const login = (userData, rememberMe) => {
     setUser(userData);
-    sessionStorage.setItem('medtrack_user', JSON.stringify(userData));
+    const userStr = JSON.stringify(userData);
+    if (rememberMe) {
+      localStorage.setItem('medtrack_user', userStr);
+    } else {
+      sessionStorage.setItem('medtrack_user', userStr);
+    }
   };
   const logout = () => {
     setUser(null);
     sessionStorage.removeItem('medtrack_user');
+    localStorage.removeItem('medtrack_user');
   };
 
   return (

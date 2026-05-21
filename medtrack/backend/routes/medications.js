@@ -69,6 +69,14 @@ router.patch('/log', async (req, res) => {
     // Upsert the log entry
     await db.upsertMedicationLog(medicationId, date, taken);
 
+    // Update the cabinet stock
+    let newStock = 30;
+    if (taken) {
+      newStock = db.decrementCabinetStock(medicationId);
+    } else {
+      newStock = db.incrementCabinetStock(medicationId);
+    }
+
     // Emit real-time update via Socket.IO
     if (_io) {
       _io.emit('medication_updated', {
@@ -77,9 +85,14 @@ router.patch('/log', async (req, res) => {
         date,
         taken: !!taken,
       });
+      _io.emit('stock_updated', {
+        patientId: med.patient_id,
+        medicationId,
+        stock: newStock
+      });
     }
 
-    res.json({ success: true, medicationId, date, taken: !!taken });
+    res.json({ success: true, medicationId, date, taken: !!taken, stock: newStock });
   } catch (error) {
     console.error('Error logging medication:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -96,9 +109,98 @@ router.post('/', async (req, res) => {
 
   try {
     const med = await db.createMedication(patientId, name, frequency);
+    
+    // Auto-initialize cabinet stock in SQLite to 30 doses
+    db.updateCabinetStock(med.id, 30);
+
+    // Emit real-time socket event so both client views know a new medication was assigned
+    if (_io) {
+      _io.emit('medication_assigned', {
+        patientId,
+        medication: med,
+        stock: 30
+      });
+    }
+
     res.json({ success: true, medication: med });
   } catch (error) {
     console.error('Error assigning medication:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/medications/:patientId/cabinet
+router.get('/:patientId/cabinet', async (req, res) => {
+  const { patientId } = req.params;
+  try {
+    const medications = await db.getMedicationsByPatientId(patientId);
+    const cabinet = {};
+    for (const med of medications) {
+      cabinet[med.id] = db.getCabinetStock(med.id);
+    }
+    res.json(cabinet);
+  } catch (error) {
+    console.error('Error fetching cabinet stock:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/medications/refill
+router.post('/refill', async (req, res) => {
+  const { patientId, medicationId } = req.body;
+  if (!patientId || !medicationId) {
+    return res.status(400).json({ error: 'patientId and medicationId are required' });
+  }
+  try {
+    db.createRefillRequest(patientId, medicationId);
+    if (_io) {
+      _io.emit('refill_requested', {
+        patientId,
+        medicationId,
+        status: 'pending'
+      });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error requesting refill:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/medications/refill/approve
+router.post('/refill/approve', async (req, res) => {
+  const { requestId } = req.body;
+  if (!requestId) {
+    return res.status(400).json({ error: 'requestId is required' });
+  }
+  try {
+    const medId = db.approveRefillRequest(requestId);
+    if (!medId) {
+      return res.status(404).json({ error: 'Refill request not found or invalid' });
+    }
+
+    const med = await db.getMedicationById(medId);
+    const newStock = 30; // Refilled successfully
+
+    if (_io) {
+      _io.emit('refill_approved', {
+        requestId,
+        medicationId: medId,
+        patientId: med ? med.patient_id : null,
+        stock: newStock
+      });
+
+      if (med) {
+        _io.emit('stock_updated', {
+          patientId: med.patient_id,
+          medicationId: medId,
+          stock: newStock
+        });
+      }
+    }
+    res.json({ success: true, medicationId: medId, stock: newStock });
+  } catch (error) {
+    console.error('Error approving refill:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

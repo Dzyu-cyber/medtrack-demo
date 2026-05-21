@@ -1,17 +1,56 @@
 import { useState } from 'react';
 import axios from 'axios';
 
-export default function PatientCard({ patient, onUpdate }) {
-  const total = patient.medications.length;
-  const taken = patient.medications.filter(m => m.taken).length;
+const PRESET_MEDICINES = [
+  { name: 'Metformin 500mg', frequency: 'Twice daily (after meals)', problem: 'Diabetes Management' },
+  { name: 'Insulin Glargine 100 U/mL', frequency: 'Once daily at bedtime', problem: 'Diabetes Management' },
+  { name: 'Aspirin 100mg', frequency: 'Once daily with water', problem: 'Hypertension' },
+  { name: 'Amlodipine 5mg', frequency: 'Once daily in the morning', problem: 'Cardiovascular' },
+  { name: 'Lisinopril 10mg', frequency: 'Once daily in the morning', problem: 'Cardiovascular' },
+  { name: 'Atorvastatin 20mg', frequency: 'Once daily in the evening', problem: 'Cardiovascular' },
+  { name: 'Metoprolol 50mg', frequency: 'Once daily with meals', problem: 'Cardiovascular' },
+  { name: 'Amoxicillin 500mg', frequency: 'Three times daily for 7 days', problem: 'Bacterial Infection' },
+  { name: 'Azithromycin 250mg', frequency: 'Once daily for 5 days', problem: 'Respiratory Infection' },
+  { name: 'Vitamin D3 2000 IU', frequency: 'Once daily in the morning', problem: 'Immunity / Vitamins' },
+  { name: 'Multivitamin', frequency: 'Once daily after breakfast', problem: 'General Health' },
+  { name: 'Omega-3 Fish Oil 1000mg', frequency: 'Twice daily with meals', problem: 'Cardiovascular' },
+  { name: 'Ibuprofen 400mg', frequency: 'Every 6 hours as needed for pain', problem: 'Pain & Inflammation' },
+  { name: 'Acetaminophen 500mg', frequency: 'Every 4-6 hours as needed', problem: 'Pain & Inflammation' },
+];
+
+export default function PatientCard({ patient, onUpdate, isSelected, onSelect }) {
+  const medications = patient?.medications || [];
+  const total = medications.length;
+  const taken = medications.filter(m => m?.taken).length;
   const pct = total > 0 ? Math.round((taken / total) * 100) : 0;
 
   // Assign Medication Modal State
   const [showModal, setShowModal] = useState(false);
   const [medName, setMedName] = useState('');
   const [medFreq, setMedFreq] = useState('');
+  const [selectedPresetIndex, setSelectedPresetIndex] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const handleAssignClick = (e) => {
+    e.stopPropagation();
+    setShowModal(true);
+  };
+
+  const handlePresetChange = (e) => {
+    const val = e.target.value;
+    setSelectedPresetIndex(val);
+    if (val === 'custom' || val === '') {
+      setMedName('');
+      setMedFreq('');
+    } else {
+      const selected = PRESET_MEDICINES[parseInt(val, 10)];
+      if (selected) {
+        setMedName(selected.name);
+        setMedFreq(selected.frequency);
+      }
+    }
+  };
 
   const handleAssignSubmit = async (e) => {
     e.preventDefault();
@@ -31,8 +70,9 @@ export default function PatientCard({ patient, onUpdate }) {
       if (data.success) {
         setMedName('');
         setMedFreq('');
+        setSelectedPresetIndex('');
         setShowModal(false);
-        if (onUpdate) onUpdate(); // Refresh the list
+        if (onUpdate) onUpdate(); // Refresh list
       }
     } catch (err) {
       console.error('Failed to assign medication', err);
@@ -43,21 +83,24 @@ export default function PatientCard({ patient, onUpdate }) {
   };
 
   return (
-    <div className="patient-card">
+    <div 
+      className={`patient-card ${isSelected ? 'selected-active' : ''}`} 
+      onClick={onSelect}
+    >
       <div className="patient-card-header">
-        <div className="patient-name">{patient.name}</div>
-        <div className="patient-phone">📞 {patient.phone || 'No phone number'}</div>
+        <div className="patient-name">{patient?.name || 'Unnamed Patient'}</div>
+        <div className="patient-phone">📞 {patient?.phone || 'No phone number'}</div>
       </div>
 
       <div className="patient-card-divider" />
 
       <div className="med-list">
         {total === 0 ? (
-          <div style={{ fontSize: '0.8rem', color: 'var(--gray-600)', padding: '10px 0', textAlign: 'center' }}>
+          <div style={{ fontSize: '0.8rem', color: '#94a3b8', padding: '10px 0', textAlign: 'center' }}>
             No medicines assigned yet.
           </div>
         ) : (
-          patient.medications.map(med => (
+          medications.map(med => (
             <div key={med.id} className="med-row">
               <span className="med-row-name">{med.name}</span>
               <span
@@ -71,23 +114,24 @@ export default function PatientCard({ patient, onUpdate }) {
         )}
       </div>
 
-      <div className="compliance-bar-wrap">
+      <div className="compliance-bar-wrap" style={{ marginTop: 'auto', paddingTop: '10px' }}>
         <div className="compliance-bar">
           <div
             className="compliance-fill"
             style={{
               width: `${pct}%`,
-              background: pct === 100 ? 'var(--teal)' : pct >= 50 ? '#f5a623' : 'var(--red)',
+              background: pct === 100 ? '#00ffbc' : pct >= 50 ? '#38bdf8' : '#ff4d4d',
+              boxShadow: pct === 100 ? '0 0 10px rgba(0, 255, 188, 0.4)' : 'none'
             }}
           />
         </div>
-        <span className="compliance-pct">{pct}%</span>
+        <span className="compliance-pct" style={{ color: pct === 100 ? '#00ffbc' : pct >= 50 ? '#38bdf8' : '#ff4d4d', fontWeight: '700' }}>{pct}%</span>
       </div>
 
-      <div className="patient-card-footer">
+      <div className="patient-card-footer" style={{ marginTop: '10px' }}>
         <button
           className="assign-med-btn"
-          onClick={() => setShowModal(true)}
+          onClick={handleAssignClick}
           type="button"
         >
           ➕ Assign Medicine
@@ -96,34 +140,52 @@ export default function PatientCard({ patient, onUpdate }) {
 
       {/* Assign Medication Modal */}
       {showModal && (
-        <div className="modal-overlay" style={{ cursor: 'default' }} onClick={() => setShowModal(false)}>
+        <div className="modal-overlay" style={{ cursor: 'default' }} onClick={(e) => { e.stopPropagation(); setShowModal(false); }}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 className="modal-title" style={{ fontSize: '1.2rem' }}>
-                Assign Medication to <span style={{ color: 'var(--teal)' }}>{patient.name}</span>
+              <h2 className="modal-title" style={{ fontSize: '1.25rem' }}>
+                Assign Medication to <span style={{ color: 'var(--teal)' }}>{patient?.name}</span>
               </h2>
               <button className="modal-close" onClick={() => setShowModal(false)}>✕</button>
             </div>
             <form onSubmit={handleAssignSubmit}>
               <div className="modal-body">
+                {/* Preset Dropdown */}
+                <div className="form-group preset-select-group">
+                  <label htmlFor={`preset-${patient.id}`}>Quick Select Medicine Preset</label>
+                  <select
+                    id={`preset-${patient.id}`}
+                    value={selectedPresetIndex}
+                    onChange={handlePresetChange}
+                  >
+                    <option value="">-- Choose Predefined Medicine --</option>
+                    {PRESET_MEDICINES.map((preset, index) => (
+                      <option key={index} value={index}>
+                        [{preset.problem}] {preset.name}
+                      </option>
+                    ))}
+                    <option value="custom">✍️ Custom Medication (Type manually...)</option>
+                  </select>
+                </div>
+
                 <div className="form-group">
                   <label htmlFor={`med-name-${patient.id}`}>Medication Name</label>
                   <input
                     id={`med-name-${patient.id}`}
                     type="text"
-                    placeholder="Metformin 500mg"
+                    placeholder="e.g. Metformin 500mg"
                     value={medName}
                     onChange={e => setMedName(e.target.value)}
                     required
-                    autoFocus
                   />
                 </div>
+                
                 <div className="form-group">
                   <label htmlFor={`med-freq-${patient.id}`}>Frequency / Instructions</label>
                   <input
                     id={`med-freq-${patient.id}`}
                     type="text"
-                    placeholder="Twice daily (after meals)"
+                    placeholder="e.g. Twice daily (after meals)"
                     value={medFreq}
                     onChange={e => setMedFreq(e.target.value)}
                     required
@@ -131,6 +193,7 @@ export default function PatientCard({ patient, onUpdate }) {
                 </div>
                 {error && <div className="login-error">⚠️ {error}</div>}
               </div>
+              
               <div className="modal-footer">
                 <button
                   type="button"

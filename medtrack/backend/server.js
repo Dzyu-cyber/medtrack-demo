@@ -30,6 +30,7 @@ async function main() {
   app.use(express.json());
 
   medicationsRoutes.setIO(io);
+  patientsRoutes.setIO(io);
 
   app.use('/api/auth', authRoutes);
   app.use('/api/patients', patientsRoutes);
