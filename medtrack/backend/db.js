@@ -215,6 +215,35 @@ async function createMedication(patientId, name, frequency) {
   return data;
 }
 
+async function deleteMedication(id) {
+  // First, delete logs in Supabase
+  const { error: logError } = await supabase
+    .from('medication_logs')
+    .delete()
+    .eq('medication_id', id);
+  if (logError) {
+    console.error(`Warning: Failed to delete medication logs for med ${id}:`, logError.message);
+  }
+
+  // Then delete the medication itself from Supabase
+  const { data, error: medError } = await supabase
+    .from('medications')
+    .delete()
+    .eq('id', id)
+    .select();
+  if (medError) throw medError;
+
+  // Now delete from SQLite cabinet_stock and refill_requests
+  if (sqliteDb) {
+    sqliteDb.run("DELETE FROM cabinet_stock WHERE medication_id = ?", [String(id)]);
+    sqliteDb.run("DELETE FROM refill_requests WHERE medication_id = ?", [String(id)]);
+    saveSQLite();
+  }
+
+  return data;
+}
+
+
 async function getMedicationLog(medicationId, date) {
   const { data, error } = await supabase
     .from('medication_logs')
@@ -421,6 +450,7 @@ module.exports = {
   getMedicationsByPatientId,
   getMedicationById,
   createMedication,
+  deleteMedication,
   getMedicationLog,
   upsertMedicationLog,
   isSupabaseActive: () => true,

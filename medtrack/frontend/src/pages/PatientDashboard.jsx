@@ -124,14 +124,22 @@ export default function PatientDashboard() {
       fetchDashboardData();
     };
 
+    const handleMedicationDeleted = ({ patientId }) => {
+      if (String(patientId) !== String(user.userId)) return;
+      // Re-fetch all dashboard details
+      fetchDashboardData();
+    };
+
     socket.on('stock_updated', handleStockUpdate);
     socket.on('refill_approved', handleRefillApproved);
     socket.on('medication_assigned', handleMedicationAssigned);
+    socket.on('medication_deleted', handleMedicationDeleted);
 
     return () => {
       socket.off('stock_updated', handleStockUpdate);
       socket.off('refill_approved', handleRefillApproved);
       socket.off('medication_assigned', handleMedicationAssigned);
+      socket.off('medication_deleted', handleMedicationDeleted);
     };
   }, [user.userId, dateStr]);
 

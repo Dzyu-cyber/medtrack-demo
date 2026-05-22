@@ -205,4 +205,31 @@ router.post('/refill/approve', async (req, res) => {
   }
 });
 
+// DELETE /api/medications/:id
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const med = await db.getMedicationById(id);
+    if (!med) {
+      return res.status(404).json({ error: 'Medication not found' });
+    }
+
+    await db.deleteMedication(id);
+
+    // Emit real-time update via Socket.IO
+    if (_io) {
+      _io.emit('medication_deleted', {
+        patientId: med.patient_id,
+        medicationId: id
+      });
+    }
+
+    res.json({ success: true, medicationId: id });
+  } catch (error) {
+    console.error('Error deleting medication:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;

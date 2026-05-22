@@ -121,6 +121,25 @@ export default function DoctorDashboard() {
     }
   };
 
+  const handleDeleteMedication = async (medicationId, name) => {
+    if (!window.confirm(`Are you sure you want to stop prescribing ${name} for this patient?`)) return;
+    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    try {
+      const { data } = await axios.delete(`${apiBase}/api/medications/${medicationId}`);
+      if (data.success) {
+        fetchPatients(viewDate);
+        setCabinetStock(prev => {
+          const next = { ...prev };
+          delete next[medicationId];
+          return next;
+        });
+      }
+    } catch (err) {
+      console.error("Failed to delete medication", err);
+      alert("Failed to remove medication. Please try again.");
+    }
+  };
+
   // Real-time Socket.IO updates (crash-proofed mapping)
   useEffect(() => {
     const handleMedicationUpdate = ({ patientId, medicationId, date, taken }) => {
@@ -185,12 +204,24 @@ export default function DoctorDashboard() {
       }
     };
 
+    const handleMedicationDeleted = ({ patientId, medicationId }) => {
+      fetchPatients(viewDate);
+      if (selectedPatientId && String(patientId) === String(selectedPatientId)) {
+        setCabinetStock(prev => {
+          const next = { ...prev };
+          delete next[medicationId];
+          return next;
+        });
+      }
+    };
+
     socket.on('medication_updated', handleMedicationUpdate);
     socket.on('stock_updated', handleStockUpdate);
     socket.on('vitals_updated', handleVitalsUpdate);
     socket.on('refill_requested', handleRefillRequested);
     socket.on('refill_approved', handleRefillApproved);
     socket.on('medication_assigned', handleMedicationAssigned);
+    socket.on('medication_deleted', handleMedicationDeleted);
 
     return () => {
       socket.off('medication_updated', handleMedicationUpdate);
@@ -199,6 +230,7 @@ export default function DoctorDashboard() {
       socket.off('refill_requested', handleRefillRequested);
       socket.off('refill_approved', handleRefillApproved);
       socket.off('medication_assigned', handleMedicationAssigned);
+      socket.off('medication_deleted', handleMedicationDeleted);
     };
   }, [viewDate, selectedPatientId, fetchPatients]);
 
@@ -215,12 +247,45 @@ export default function DoctorDashboard() {
     e.preventDefault();
     setModalError('');
     setModalLoading(true);
+
+    const trimmedName = patName.trim();
+    const trimmedUsername = patUsername.trim();
+    const trimmedPhone = patPhone.trim();
+
+    // Client-side validations matching backend constraints
+    const nameRegex = /^[a-zA-Z\s.-]{2,50}$/;
+    if (!nameRegex.test(trimmedName)) {
+      setModalError('Patient name must be 2-50 characters long and contain only letters, spaces, dots, or hyphens.');
+      setModalLoading(false);
+      return;
+    }
+
+    const usernameRegex = /^[a-zA-Z0-9_-]{3,20}$/;
+    if (!usernameRegex.test(trimmedUsername)) {
+      setModalError('Username must be 3-20 characters long and contain only letters, numbers, underscores (_), or hyphens (-).');
+      setModalLoading(false);
+      return;
+    }
+
+    const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)\S{8,30}$/;
+    if (!passwordRegex.test(patPassword)) {
+      setModalError('Password must be 8-30 characters long, containing no spaces, and must include at least one letter and one number.');
+      setModalLoading(false);
+      return;
+    }
+
+    if (trimmedPhone && !/^\d{10}$/.test(trimmedPhone)) {
+      setModalError('Phone number must be exactly 10 digits.');
+      setModalLoading(false);
+      return;
+    }
+
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       const { data } = await axios.post(`${apiUrl}/api/patients`, {
-        name: patName.trim(),
-        phone: patPhone.trim() || null,
-        username: patUsername.trim(),
+        name: trimmedName,
+        phone: trimmedPhone || null,
+        username: trimmedUsername,
         password: patPassword,
         doctorId: user.userId
       });
@@ -391,16 +456,48 @@ export default function DoctorDashboard() {
                             <span style={{ fontWeight: '600', color: 'white', display: 'block', fontSize: '0.95rem' }}>{med.name}</span>
                             <span style={{ fontSize: '0.78rem', color: '#94a3b8', display: 'block', marginTop: '2px' }}>🕐 {med.frequency}</span>
                           </div>
-                          <span style={{ 
-                            padding: '4px 10px', 
-                            fontSize: '0.75rem', 
-                            borderRadius: '99px', 
-                            fontWeight: '600',
-                            background: med.taken ? 'rgba(0, 255, 188, 0.12)' : 'rgba(255, 77, 77, 0.12)',
-                            color: med.taken ? '#00ffbc' : '#ff4d4d'
-                          }}>
-                            {med.taken ? '✓ Logged' : '✗ Pending'}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <span style={{ 
+                              padding: '4px 10px', 
+                              fontSize: '0.75rem', 
+                              borderRadius: '99px', 
+                              fontWeight: '600',
+                              background: med.taken ? 'rgba(0, 255, 188, 0.12)' : 'rgba(255, 77, 77, 0.12)',
+                              color: med.taken ? '#00ffbc' : '#ff4d4d'
+                            }}>
+                              {med.taken ? '✓ Logged' : '✗ Pending'}
+                            </span>
+                            <button
+                              onClick={() => handleDeleteMedication(med.id, med.name)}
+                              style={{
+                                background: 'rgba(239, 68, 68, 0.08)',
+                                border: '1px solid rgba(239, 68, 68, 0.15)',
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                padding: '6px 10px',
+                                borderRadius: '8px',
+                                fontSize: '0.78rem',
+                                fontWeight: '600',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                              }}
+                              onMouseEnter={e => {
+                                e.currentTarget.style.background = '#ef4444';
+                                e.currentTarget.style.color = 'white';
+                                e.currentTarget.style.borderColor = '#ef4444';
+                              }}
+                              onMouseLeave={e => {
+                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
+                                e.currentTarget.style.color = '#ef4444';
+                                e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.15)';
+                              }}
+                              title="Delete Prescription"
+                            >
+                              🗑️ Remove
+                            </button>
+                          </div>
                         </div>
                       ))
                     )}
@@ -432,6 +529,7 @@ export default function DoctorDashboard() {
                     value={patName}
                     onChange={e => setPatName(e.target.value)}
                     required
+                    maxLength={50}
                   />
                 </div>
                 <div className="form-group">
@@ -441,7 +539,8 @@ export default function DoctorDashboard() {
                     type="tel"
                     placeholder="9876543210"
                     value={patPhone}
-                    onChange={e => setPatPhone(e.target.value)}
+                    onChange={e => setPatPhone(e.target.value.replace(/\D/g, ''))}
+                    maxLength={10}
                   />
                 </div>
                 <div className="form-row">
@@ -454,6 +553,7 @@ export default function DoctorDashboard() {
                       value={patUsername}
                       onChange={e => setPatUsername(e.target.value)}
                       required
+                      maxLength={20}
                     />
                   </div>
                   <div className="form-group">
@@ -465,6 +565,7 @@ export default function DoctorDashboard() {
                       value={patPassword}
                       onChange={e => setPatPassword(e.target.value)}
                       required
+                      maxLength={30}
                     />
                   </div>
                 </div>

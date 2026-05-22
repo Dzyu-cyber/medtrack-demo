@@ -20,13 +20,11 @@ export default function Login() {
 
   useEffect(() => {
     if (user) {
-      navigate(role === 'doctor' ? '/doctor' : '/patient', { replace: true });
+      navigate(user.role === 'doctor' ? '/doctor' : '/patient', { replace: true });
     }
-  }, [user, navigate, role]);
+  }, [user, navigate]);
 
-  // Interactive Simulator States
-  const [simAspirin, setSimAspirin] = useState(false);
-  const [simVitamin, setSimVitamin] = useState(false);
+
 
 
   const handleRoleChange = (selectedRole) => {
@@ -56,9 +54,26 @@ export default function Login() {
 
     try {
       if (role === 'doctor' && doctorMode === 'register') {
+        const trimmedUsername = username.trim();
+        
+        // Strict frontend validation checks matching the backend
+        const usernameRegex = /^[a-zA-Z0-9_-]{3,20}$/;
+        if (!usernameRegex.test(trimmedUsername)) {
+          setError('Username must be 3-20 characters long and contain only letters, numbers, underscores (_), or hyphens (-).');
+          setLoading(false);
+          return;
+        }
+
+        const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)\S{8,30}$/;
+        if (!passwordRegex.test(password)) {
+          setError('Password must be 8-30 characters long, containing no spaces, and must include at least one letter and one number.');
+          setLoading(false);
+          return;
+        }
+
         // Register Doctor
         const { data } = await axios.post(`${apiUrl}/api/auth/register-doctor`, {
-          username: username.trim(),
+          username: trimmedUsername,
           password
         });
         if (data.success) {
@@ -93,10 +108,7 @@ export default function Login() {
     }
   };
 
-  // Live Simulator Computations
-  const takenCount = (simAspirin ? 1 : 0) + (simVitamin ? 1 : 0);
-  const progressPercent = Math.round((takenCount / 2) * 100);
-  const strokeDashoffset = 251.2 - (251.2 * progressPercent) / 100;
+
 
   return (
     <div className="landing-container">
@@ -109,7 +121,7 @@ export default function Login() {
         <nav className="landing-nav-links">
           <a href="#about" className="landing-nav-link" onClick={(e) => { e.preventDefault(); scrollToSection('about'); }}>About</a>
           <a href="#workflow" className="landing-nav-link" onClick={(e) => { e.preventDefault(); scrollToSection('workflow'); }}>How It Works</a>
-          <a href="#simulator" className="landing-nav-link" onClick={(e) => { e.preventDefault(); scrollToSection('simulator'); }}>Live Demo</a>
+
           <a href="#features" className="landing-nav-link" onClick={(e) => { e.preventDefault(); scrollToSection('features'); }}>Functionality</a>
           <a href="#portal" className="landing-nav-link" onClick={(e) => { e.preventDefault(); scrollToSection('portal'); }}>Access Portal</a>
         </nav>
@@ -255,107 +267,7 @@ export default function Login() {
         </div>
       </section>
 
-      {/* Interactive Adherence Simulator Section */}
-      <section id="simulator" className="landing-section" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-        <div className="about-section-header">
-          <span className="section-subtitle">Try It Out</span>
-          <h2 className="section-title">Interactive Compliance Simulator</h2>
-        </div>
-        
-        <div className="simulator-container">
-          <div className="sim-controls">
-            <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '10px' }}>Log Mock Doses</h3>
-            <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '16px', lineHeight: '1.5' }}>
-              Experience the ease of our logging flow. Take these virtual medications to see the progress ring update and watch how data is synchronized instantly.
-            </p>
-            
-            {/* Pill Row 1 */}
-            <div className={`sim-pill-row ${simAspirin ? 'taken' : 'active'}`}>
-              <div className="sim-pill-info">
-                <div className="sim-pill-icon">💊</div>
-                <div>
-                  <span className="sim-pill-name">Aspirin (100mg)</span>
-                  <span className="sim-pill-time">Morning Dosage — Scheduled 8:00 AM</span>
-                </div>
-              </div>
-              <button 
-                type="button"
-                className={`sim-log-btn ${simAspirin ? 'taken-btn' : ''}`}
-                onClick={() => setSimAspirin(true)}
-                disabled={simAspirin}
-              >
-                {simAspirin ? '✓ Logged' : 'Log Dose'}
-              </button>
-            </div>
 
-            {/* Pill Row 2 */}
-            <div className={`sim-pill-row ${simVitamin ? 'taken' : 'active'}`}>
-              <div className="sim-pill-info">
-                <div className="sim-pill-icon">☀️</div>
-                <div>
-                  <span className="sim-pill-name">Vitamin D3</span>
-                  <span className="sim-pill-time">Afternoon Dosage — Scheduled 1:00 PM</span>
-                </div>
-              </div>
-              <button 
-                type="button"
-                className={`sim-log-btn ${simVitamin ? 'taken-btn' : ''}`}
-                onClick={() => setSimVitamin(true)}
-                disabled={simVitamin}
-              >
-                {simVitamin ? '✓ Logged' : 'Log Dose'}
-              </button>
-            </div>
-          </div>
-
-          <div className="sim-results">
-            <span className="sim-results-title">Live App Status</span>
-            
-            <div className="progress-ring-wrapper">
-              <svg className="progress-svg" viewBox="0 0 100 100">
-                <circle className="progress-bg-ring" cx="50" cy="50" r="40" />
-                <circle 
-                  cx="50" 
-                  cy="50" 
-                  r="40" 
-                  fill="none"
-                  stroke="var(--teal)"
-                  strokeWidth="8"
-                  strokeLinecap="round"
-                  strokeDasharray="251.2"
-                  style={{ 
-                    strokeDashoffset: strokeDashoffset, 
-                    transition: 'stroke-dashoffset 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)' 
-                  }}
-                />
-              </svg>
-              <div className="progress-text-center">
-                <span className="progress-percentage">{progressPercent}%</span>
-                <span className="progress-sub">Compliance</span>
-              </div>
-            </div>
-
-            <div style={{ marginTop: '20px', display: 'flex', gap: '8px' }}>
-              <div className="stat-pill">{takenCount} of 2 Taken</div>
-              {progressPercent === 100 ? (
-                <div className="stat-pill" style={{ background: 'rgba(0, 255, 188, 0.15)', color: '#00ffbc', border: '1px solid rgba(0, 255, 188, 0.3)' }}>Perfect Day! 🎉</div>
-              ) : (
-                <div className="stat-pill delay">Doses Remaining</div>
-              )}
-            </div>
-
-            {(simAspirin || simVitamin) && (
-              <button 
-                type="button"
-                className="sim-reset-btn"
-                onClick={() => { setSimAspirin(false); setSimVitamin(false); }}
-              >
-                Reset Simulation 🔄
-              </button>
-            )}
-          </div>
-        </div>
-      </section>
 
       {/* Functionality & Features Section */}
       <section id="features" className="landing-section" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
@@ -464,6 +376,7 @@ export default function Login() {
                 onChange={e => setUsername(e.target.value)}
                 required
                 autoComplete="off"
+                maxLength={20}
               />
             </div>
             <div className="form-group">
@@ -475,6 +388,7 @@ export default function Login() {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
+                maxLength={30}
               />
             </div>
 

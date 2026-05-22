@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const { validateUsername, validatePassword } = require('../utils/validation');
 
 // POST /api/auth/register-doctor
 router.post('/register-doctor', async (req, res) => {
@@ -10,8 +11,23 @@ router.post('/register-doctor', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Username and password are required' });
   }
 
+  const trimmedUsername = username.trim();
+
+  if (!validateUsername(trimmedUsername)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Username must be 3-20 characters long and contain only letters, numbers, underscores (_), or hyphens (-).'
+    });
+  }
+
+  if (!validatePassword(password)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Password must be 8-30 characters long, containing no spaces, and must include at least one letter and one number.'
+    });
+  }
+
   try {
-    const trimmedUsername = username.trim();
     const exists = await db.checkDoctorUsernameExists(trimmedUsername);
     if (exists) {
       return res.status(400).json({ success: false, message: 'Username is already taken' });

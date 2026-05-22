@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const { validateUsername, validatePassword, validatePhone, validateName } = require('../utils/validation');
 
 // GET /api/patients?doctorId=X&date=YYYY-MM-DD
 router.get('/', async (req, res) => {
@@ -62,14 +63,41 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'name, username, password, and doctorId are required' });
   }
 
+  const trimmedName = name.trim();
+  const trimmedUsername = username.trim();
+
+  if (!validateName(trimmedName)) {
+    return res.status(400).json({
+      error: 'Patient name must be 2-50 characters long and contain only letters, spaces, dots, or hyphens.'
+    });
+  }
+
+  if (!validateUsername(trimmedUsername)) {
+    return res.status(400).json({
+      error: 'Username must be 3-20 characters long and contain only letters, numbers, underscores (_), or hyphens (-).'
+    });
+  }
+
+  if (!validatePassword(password)) {
+    return res.status(400).json({
+      error: 'Password must be 8-30 characters long, containing no spaces, and must include at least one letter and one number.'
+    });
+  }
+
+  const phoneStr = phone ? String(phone).trim() : null;
+  if (phoneStr && !validatePhone(phoneStr)) {
+    return res.status(400).json({
+      error: 'Phone number must be exactly 10 digits.'
+    });
+  }
+
   try {
-    const trimmedUsername = username.trim();
     const exists = await db.checkPatientUsernameExists(trimmedUsername);
     if (exists) {
       return res.status(400).json({ error: 'Username is already taken by another patient' });
     }
 
-    const patient = await db.createPatient(name.trim(), trimmedUsername, password, phone || null, doctorId);
+    const patient = await db.createPatient(trimmedName, trimmedUsername, password, phoneStr || null, doctorId);
     res.json(patient);
   } catch (error) {
     console.error('Error creating patient:', error);
